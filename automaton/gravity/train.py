@@ -11,7 +11,7 @@ from torch import nn, optim
 from torch.nn import functional as F
 
 def get_board(coords, resolution=32):
-    board = torch.zeros((resolution, resolution))
+    board = torch.zeros((resolution, resolution), device=coords.device)
     for c in coords:
         idx = (c * resolution).int()
         if idx.min() >= 0 and idx.max() < resolution:
@@ -32,18 +32,19 @@ def update(coords, vel, strength=1e-3, dampening=0.999):
     vel = vel * dampening
     return coords, vel
 
-def trajectory(n_steps, n_obj=3, resolution=32, coords=None, vel=None):
-    coords = torch.rand((n_obj, 2)) if coords is None else coords
-    vel = torch.zeros_like(coords) if vel is None else vel
+def trajectory(n_steps, n_obj=3, resolution=32, coords=None, vel=None, device='cpu'):
+    coords = torch.rand((n_obj, 2), device=device) if coords is None else coords
+    vel = torch.zeros_like(coords, device=coords.device) if vel is None else vel
 
-    frames = torch.empty((n_steps, resolution, resolution))
+    frames = torch.empty((n_steps, resolution, resolution), device=device)
     for i in range(n_steps):
         frames[i] = get_board(coords, resolution)
         coords, vel = update(coords, vel)
     return frames
 
-def train(save_path, n_traj=8, n_steps=20, n_obj=2, sample_delay=1, res=20, lr=1e-3, double_step_interval=100, max_steps=100, save_interval=10, log_interval=2):
-    model = NeuralAutomatonCollector()
+def train(save_path, n_traj=8, n_steps=20, n_obj=2, sample_delay=1, res=20, lr=1e-3,
+          double_step_interval=100, max_steps=100, save_interval=10, log_interval=2, device='cpu'):
+    model = NeuralAutomatonCollector().to(device)
     loss_fn = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
@@ -53,12 +54,12 @@ def train(save_path, n_traj=8, n_steps=20, n_obj=2, sample_delay=1, res=20, lr=1
         optimizer.zero_grad()
         
         # get ground truth simulation
-        y = torch.stack([trajectory(n_steps + 1, n_obj=n_obj, resolution=res) for _ in range(n_traj)])
-        x = torch.cat([y[:,0].unsqueeze(1), torch.zeros(n_traj, model.n_channels - 1, res, res)], dim=1)
+        y = torch.stack([trajectory(n_steps + 1, n_obj=n_obj, resolution=res, device=device) for _ in range(n_traj)])
+        x = torch.cat([y[:,0].unsqueeze(1), torch.zeros(n_traj, model.n_channels - 1, res, res, device=device)], dim=1)
         y = y[:,sample_delay::sample_delay]
         
         # forward step
-        pred = torch.zeros(n_traj, n_steps // sample_delay, res, res)
+        pred = torch.zeros(n_traj, n_steps // sample_delay, res, res, device=device)
         for i in range(n_steps):
             x = model(x).clip(0, 1)
             if (i + 1) % sample_delay == 0:
@@ -72,7 +73,7 @@ def train(save_path, n_traj=8, n_steps=20, n_obj=2, sample_delay=1, res=20, lr=1
         optimizer.step()
 
         # logging
-        losses.append(loss.detach().numpy())
+        losses.append(loss.cpu().detach().numpy())
         del loss
         step += 1
 

@@ -8,7 +8,7 @@ import torch
 from torch import nn, optim
 
 def tick(state):
-    kernel = torch.ones((1, 1, 3, 3))
+    kernel = torch.ones((1, 1, 3, 3), device=state.device)
     kernel[:,:,1,1] = 0
 
     state_ndim = state.ndim
@@ -25,8 +25,8 @@ def tick(state):
         state = state[0]
     return state
 
-def train(save_path, board_size=64, batch_size=32, threshold=0.8, lr=1e-2, plot=False, save_interval=50):
-    model = NeuralAutomaton()
+def train(save_path, board_size=64, batch_size=32, threshold=0.8, lr=1e-2, plot=False, save_interval=50, device='cpu'):
+    model = NeuralAutomaton().to(device)
     loss_fn = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
@@ -34,7 +34,7 @@ def train(save_path, board_size=64, batch_size=32, threshold=0.8, lr=1e-2, plot=
     while True:
         optimizer.zero_grad()
 
-        batch = (torch.rand((batch_size, board_size, board_size)) > threshold).float()
+        batch = (torch.rand((batch_size, board_size, board_size), device=device) > threshold).float()
         target = tick(batch)
         prediction = model(batch)
         
@@ -42,23 +42,23 @@ def train(save_path, board_size=64, batch_size=32, threshold=0.8, lr=1e-2, plot=
         loss.backward()
         optimizer.step()
 
-        print(f'{step}: {loss.detach().numpy()}')
+        print(f'{step}: {loss.cpu().detach().numpy()}')
         step += 1
 
         if step % save_interval == 0:
             print('Saving model checkpoint...')
-            path = abspath(join(save_path, f'model-{loss.detach().numpy():.4f}'))
+            path = abspath(join(save_path, f'model-{loss.cpu().detach().numpy():.4f}'))
             torch.save(model, path)
 
             if plot:
-                state = (torch.rand((20, 20)) > 0.8).float()
+                state = (torch.rand((20, 20), device=device) > 0.8).float()
                 _, axes = plt.subplots(2, 2)
 
                 axes[0,0].matshow(state)
                 axes[0,0].set_title('before')
                 axes[0,0].axis('off')
 
-                prediction = model(state)[0].detach().numpy()
+                prediction = model(state)[0].cpu().detach().numpy()
                 axes[1,0].matshow(prediction)
                 axes[1,0].set_title('prediction')
                 axes[1,0].axis('off')
