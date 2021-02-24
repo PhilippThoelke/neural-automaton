@@ -46,17 +46,18 @@ def trajectory(n_steps, n_obj=3, resolution=32, coords=None, vel=None, device='c
     return frames
 
 
-def train(save_path, load_model=None, n_traj=16, n_steps=50, n_obj=2, res=32, lr=1e-4, device='cpu'):
+def train(save_path, load_model=None, n_traj=16, steps_range=(30, 60), n_obj=2, res=30, lr=1e-4, device='cpu'):
     if load_model is None:
         model = NeuralAutomatonCollector().to(device)
     else:
         model = torch.load(load_model, map_location=device)
-    loss_fn = nn.L1Loss()
+    loss_fn = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     step = 0
     while True:
         optimizer.zero_grad()
+        n_steps = torch.randint(*steps_range, (1,))
 
         # get ground truth simulation
         y = torch.stack([trajectory(n_steps + 1, n_obj=n_obj, resolution=res, device=device) for _ in range(n_traj)])
@@ -67,7 +68,8 @@ def train(save_path, load_model=None, n_traj=16, n_steps=50, n_obj=2, res=32, lr
             x = model(x).clip(0, 1)
 
         # backward step
-        loss = loss_fn(x[:,0], y[:,-1])
+        mask = y[:,-1] == 1
+        loss = loss_fn(x[:,0][mask], y[:,-1][mask]) + 0.1 * loss_fn(x[:,0][~mask], y[:,-1][~mask])
         loss.backward()
         optimizer.step()
 
