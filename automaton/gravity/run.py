@@ -7,8 +7,9 @@ from matplotlib.animation import FuncAnimation
 
 import torch
 
-def run(model_path, res=32, n_obj=2, reset_interval=100):
-    model = torch.load(model_path)
+
+def run(model_path, res=32, n_obj=2, reset_interval=50):
+    model = torch.load(model_path, map_location='cpu')
 
     def reset():
         coords = torch.rand((n_obj, 2))
@@ -41,6 +42,7 @@ def run(model_path, res=32, n_obj=2, reset_interval=100):
     anim = FuncAnimation(fig, update, fargs=(state, coords, vel), interval=1)
     plt.show()
 
+
 if __name__ == '__main__':
-    model_path = abspath(join(dirname(__file__), 'models', 'model-0.1815'))
+    model_path = abspath(join(dirname(__file__), 'models', 'model-0.0769'))
     run(model_path)

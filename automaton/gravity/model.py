@@ -1,8 +1,9 @@
 import torch
 from torch import nn
 
+
 class NeuralAutomatonCollector(nn.Module):
-    def __init__(self, n_channels=16, n_col_filters=16, n_col_layers=3, n_col_reapeat=16, n_update_filters=16, n_update_layers=4):
+    def __init__(self, n_channels=8, n_col_filters=8, n_col_layers=2, n_col_reapeat=20, n_update_filters=8, n_update_layers=3):
         super(NeuralAutomatonCollector, self).__init__()
         self.n_channels = n_channels
         self.n_col_reapeat = n_col_reapeat
