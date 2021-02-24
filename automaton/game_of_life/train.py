@@ -1,4 +1,4 @@
-from model import NeuralAutomaton
+from automaton.game_of_life.model import NeuralAutomaton
 
 import os
 from os.path import abspath, dirname, join, exists
@@ -25,34 +25,29 @@ def tick(state):
         state = state[0]
     return state
 
-def main():
-    board_size = 64
-    batch_size = 32
-    threshold = 0.8
-    plot = False
-
+def train(save_path, board_size=64, batch_size=32, threshold=0.8, lr=1e-2, plot=False, save_interval=50):
     model = NeuralAutomaton()
     loss_fn = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-2)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
     step = 1
     while True:
+        optimizer.zero_grad()
+
         batch = (torch.rand((batch_size, board_size, board_size)) > threshold).float()
         target = tick(batch)
         prediction = model(batch)
-        loss = loss_fn(prediction, target)
         
-        optimizer.zero_grad()
+        loss = loss_fn(prediction, target)
         loss.backward()
         optimizer.step()
 
         print(f'{step}: {loss.detach().numpy()}')
         step += 1
 
-        if step % 50 == 0:
-            path = abspath(join(dirname(__file__), 'models', f'model-{loss.detach().numpy():.4f}'))
-            if not exists(dirname(path)):
-                os.makedirs(dirname(path))
+        if step % save_interval == 0:
+            print('Saving model checkpoint...')
+            path = abspath(join(save_path, f'model-{loss.detach().numpy():.4f}'))
             torch.save(model, path)
 
             if plot:
@@ -81,4 +76,7 @@ def main():
                 plt.show()
 
 if __name__ == '__main__':
-    main()
+    save_path = join(dirname(__file__), 'models')
+    if not exists(save_path):
+        os.makedirs(save_path)
+    train(save_path)

@@ -1,4 +1,4 @@
-from model import NeuralAutomatonCollector
+from automaton.gravity.model import NeuralAutomatonCollector
 
 import os
 from os.path import abspath, dirname, join, exists
@@ -10,9 +10,9 @@ import torch
 from torch import nn, optim
 from torch.nn import functional as F
 
-def get_board(coords, vel, resolution=32):
+def get_board(coords, resolution=32):
     board = torch.zeros((resolution, resolution))
-    for c, v in zip(coords, vel):
+    for c in coords:
         idx = (c * resolution).int()
         if idx.min() >= 0 and idx.max() < resolution:
             board[idx[0],idx[1]] = 1
@@ -38,49 +38,60 @@ def trajectory(n_steps, n_obj=3, resolution=32, coords=None, vel=None):
 
     frames = torch.empty((n_steps, resolution, resolution))
     for i in range(n_steps):
-        frames[i] = get_board(coords, vel, resolution)
+        frames[i] = get_board(coords, resolution)
         coords, vel = update(coords, vel)
     return frames
 
-def main():
-    n_traj = 8
-    n_steps = 20
-    n_obj = 2
-    res = 20
-
+def train(save_path, n_traj=8, n_steps=20, n_obj=2, sample_delay=1, res=20, lr=1e-3, double_step_interval=100, max_steps=100, save_interval=10, log_interval=2):
     model = NeuralAutomatonCollector()
     loss_fn = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
     step = 0
     losses = []
     while True:
+        optimizer.zero_grad()
+        
+        # get ground truth simulation
         y = torch.stack([trajectory(n_steps + 1, n_obj=n_obj, resolution=res) for _ in range(n_traj)])
-
-        pred = torch.zeros(n_traj, n_steps, res, res)
         x = torch.cat([y[:,0].unsqueeze(1), torch.zeros(n_traj, model.n_channels - 1, res, res)], dim=1)
+        y = y[:,sample_delay::sample_delay]
+        
+        # forward step
+        pred = torch.zeros(n_traj, n_steps // sample_delay, res, res)
         for i in range(n_steps):
             x = model(x).clip(0, 1)
-            pred[:,i] = x[:,0]
+            if (i + 1) % sample_delay == 0:
+                pred[:,i // sample_delay] = x[:,0]
+                x = x.detach()
 
-        optimizer.zero_grad()
-        mask = y[:,1:] == 1
-        loss = loss_fn(pred[mask], y[:,1:][mask]) + pred.norm(p=1) * 5e-5
+        # backward step
+        mask = y == 1
+        loss = loss_fn(pred[mask], y[mask]) + pred.norm(p=1) * 5e-5
         loss.backward()
         optimizer.step()
 
+        # logging
         losses.append(loss.detach().numpy())
+        del loss
         step += 1
 
-        if step % 50 == 0:
-            path = abspath(join(dirname(__file__), 'models', f'model-{np.mean(losses):.4f}'))
-            if not exists(dirname(path)):
-                os.makedirs(dirname(path))
+        if step % save_interval == 0:
+            print('Saving model checkpoint...')
+            path = abspath(join(save_path, f'model-{np.mean(losses):.4f}'))
             torch.save(model, path)
-
-        if step % 25 == 0:
+            
+        if step % log_interval == 0:
             print(f'step {step}: {np.mean(losses)}')
             losses = []
+        
+        if step % double_step_interval == 0:
+            n_steps = min(n_steps * 2, max_steps)
+            sample_delay = min(10, sample_delay * 2)
+            print(f'Setting number of simulation steps to {n_steps}')
 
 if __name__ == '__main__':
-    main()
+    save_path = join(dirname(__file__), 'models')
+    if not exists(save_path):
+        os.makedirs(save_path)
+    train(save_path)
