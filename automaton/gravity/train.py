@@ -42,9 +42,12 @@ def trajectory(n_steps, n_obj=3, resolution=32, coords=None, vel=None, device='c
         coords, vel = update(coords, vel)
     return frames
 
-def train(save_path, n_traj=8, n_steps=20, n_obj=2, sample_delay=1, res=20, lr=1e-3,
+def train(save_path, load_model=None, n_traj=8, n_steps=20, n_obj=2, sample_delay=1, res=20, lr=1e-3,
           double_step_interval=100, max_steps=100, save_interval=10, log_interval=2, device='cpu'):
-    model = NeuralAutomatonCollector().to(device)
+    if load_model is None:
+        model = NeuralAutomatonCollector().to(device)
+    else:
+        model = torch.load(load_model, map_location=device)
     loss_fn = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
@@ -95,4 +98,4 @@ if __name__ == '__main__':
     save_path = join(dirname(__file__), 'models')
     if not exists(save_path):
         os.makedirs(save_path)
-    train(save_path)
+    train(save_path, load_model='/home/philipp/Documents/neural-automaton/automaton/gravity/models/model-0.1815')
