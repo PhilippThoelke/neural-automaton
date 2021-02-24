@@ -46,12 +46,12 @@ def trajectory(n_steps, n_obj=3, resolution=32, coords=None, vel=None, device='c
     return frames
 
 
-def train(save_path, load_model=None, n_traj=16, n_steps=50, n_obj=2, res=32, lr=1e-3, device='cpu'):
+def train(save_path, load_model=None, n_traj=16, n_steps=50, n_obj=2, res=32, lr=1e-4, device='cpu'):
     if load_model is None:
         model = NeuralAutomatonCollector().to(device)
     else:
         model = torch.load(load_model, map_location=device)
-    loss_fn = nn.MSELoss()
+    loss_fn = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     step = 0
